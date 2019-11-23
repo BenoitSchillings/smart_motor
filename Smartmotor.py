@@ -9,7 +9,6 @@ class Smartmotor:
     def __init__(self):
         self.atEnd = False
         self.setupSerialConnection()
-        self.endPosition = 675000 # 764000=6 metres, 675000 is start of board
 
     def setupSerialConnection(self):
         self.ser = serial.Serial(port='/dev/ttyS0', baudrate=9600,
@@ -41,75 +40,39 @@ class Smartmotor:
             print('Serial port is not open')
             return(False)
 
-    def doScan(self):
-        '''Send commands to smartmotor to move board through scanner'''
-        print('Starting scan')
-        self.atEnd = False
-        self.ser.write('VT=60000 ') # Joe90 target speed normally 300000
-        time.sleep(0.1)
-        self.ser.write('PT=%d ' % self.endPosition)
-        time.sleep(0.1)
-        self.ser.write('G ') # Go!
+    def Go(self):
+        self.ser.write('G ')
 
-    def getStartPosition(self):
-        '''Allow for a start position in front of the limit switch to save 
-        collecting images before the board is under the camera'''
-        print('Preparing to preposition')
-        startPosition = 0
-        rospy.loginfo("Start position is %d" % startPosition)
-        if (startPosition<0):
-            startPosition = 0
-        elif (startPosition>400000):
-            startPosition = 400000
-        return(startPosition)
-        
-    def prePosition(self):
-        '''Send commands to smartmotor to move board through scanner'''
-        print('Starting prepositioning')
-        
-        self.atEnd = False
-        self.ser.write('VT=600000 ') # Joe90 target speed normally 300000
+    def Speed(self, speed):
+        self.ser.write('VT=%d ', speed)
         time.sleep(0.1)
-        startPosition = self.getStartPosition()
-        self.ser.write('PT=%d ' % startPosition) # 764000 = 6 metres
+
+    def Acceleration(self, acc):
+        self.ser.write('ADT=%d ', acc)
         time.sleep(0.1)
-        self.ser.write('G ') # Go!
 
-    def returnToStartPosition(self):
-        '''C30 is preprogrammed into the smartmotor to return to origin'''
-        
-        self.atEnd = False
-        self.ser.write('GOSUB(30) ')
+    def Target(self, pos):
+        self.ser.write('PRT=%d ', pos)
+        time.sleep(0.1)
 
-    def home(self):
-        '''C10 is preprogrammed into the smartmotor to find the home limit
-        switch'''
-        
-        self.atEnd = False
-        self.ser.write('GOSUB(10) ')
-        return()
 
-    def getDisplacement(self):
+    def getPosition(self):
         self.ser.write('RPA ')
         currentString = ''
         currentChar = None
         while (currentChar!=' ' and currentChar!='\n' and currentChar!='\r'):
             currentChar = self.ser.read()
             currentString += currentChar
-        displacement = int(currentString)
-        if ((self.endPosition - displacement)<100):
-            self.atEnd = True
-        return(SmartmotorDisplacementResponse(displacement))
-
-    def runAll(self):
-        self.prePosition()
-        time.sleep(10.0) # allow time to get to start_position
-        self.doScan()
-        while(True):
-            if (self.atEnd==True):
-                break
-        time.sleep(4.0)
-        self.returnToStartPosition()
+        position = int(currentString)
+        return(position)
 
 if __name__ == '__main__':
     motor = Smartmotor()
+    motor.Speed(1000)
+    motor.Acceleration(20)
+    motor.Target(10000)
+    motor.Go()
+    print(motor.getPosition())
+    time.sleep(2)
+    print(motor.getPosition())
+    motor.closeSerialPort()
