@@ -92,12 +92,32 @@ class Server:
 
         if (command[0:3] == ':Sr'):             #:Sr HH:MM:SS.S# 
             result = parse(":Sr {}:{}:{}.{}#", command)
+            self.ra = int(result[0])*15.0 + int(result[1])/60.0 + int(result[2])/3600.0
             print(result)
             return '1'
         if (command[0:3] == ':Sd'):
             result = parse(":Sd {}*{}:{}#", command)   #:Sd sDD*MM:SS# 
+            r0 = int(result[0])
+            sign = 1
+            if (r0 < 0.0):
+                r0 = - r0
+                sign = -1
+            self.dec = sign*(r0 + int(result[1])/60.0 + int(result[2])/(3600.0))
+
             print(result)
             return '1'
+
+
+        if (command[0:3] == ':RR'): #:RR sxxx.xxxx# Selects the tracking rate in the RA axis to xxx.xxxx
+            result = parse(":RR {}#", command)
+            print("rate RA is ", result[0])
+            return('1')
+
+        if (command[0:3] == ':RD'): #:RD sxxx.xxxx# Selects the tracking rate in the DEC axis to xxx.xxxx
+            result = parse(":D {}#", command)
+            print("rate DEC is ", result[0])
+            return('1')
+
     
 #------------------------------------------------------------
 
