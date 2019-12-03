@@ -252,7 +252,7 @@ class Mount:
     
 
     def track(self):
-        self.RA_rate(15.0)
+        self.RA_rate(15.041)
         self.DEC_rate(0)
         self.motor_RA.Target(10000000)
         time.sleep(0.1)
