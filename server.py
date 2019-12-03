@@ -1,6 +1,6 @@
 import socket
 import sys
-
+from parse import *
 
 class Server:
     def ra_to_string(self, ra):
@@ -28,8 +28,70 @@ class Server:
         return sign + str
        
 
+#check for numerical value before the # at the end of the command
+#this will define a command which has to be parsed
+
+
+    def is_complex(self, command):
+        if (len(command) == 1):
+            return False
+
+        char = command[-2]
+
+        if (char >= '0' and char <= '9'):
+            return True
+        return False
+        
+
+    def handle_complex(self, command):
+        print("complex ", command)
+        if (command[0:3] == ':RT'):
+            result = parse(":RT{}#", command)
+            v = int(result[0])
+            if (v == 0):
+                print("lunar speed")
+            if (v == 1):
+                print("Solar speed")
+            if (v == 2):
+                print("sidereal speed")
+            if (v == 9):
+                print("zero speed")
+
+            return '#'
+
+        if (command[0:3] == ':RG'):
+            result = parse(":RG{}#", command)
+            v = int(result[0])
+            if (v == 0):
+                print("guide 0.25")
+            if (v == 1):
+                print("guide 0.5")
+            if (v == 2):
+                print("guide 1.0")
+
+            return '#'
+
+        if (command[0:3] == ':RC'):
+            result = parse(":RC{}#", command)
+            v = int(result[0])
+            if (v == 0):
+                print("center rate 12x")
+            if (v == 1):
+                print("center rate 64x")
+            if (v == 2):
+                print("center rate 600x")
+            if (v == 2):
+                print("center rate 1200x")
+            return '#'
+    
+
     def handle_command(self, command):
         print('received "%s"' % command)
+        if (self.is_complex(command)):
+            return self.handle_complex(command)
+
+
+
         if (command == '#'):
             return '#'
         if (command == ':V#'):
@@ -43,36 +105,14 @@ class Server:
         if (command == ':GD#'):         #DEC
             return self.dec_to_string(self.dec) + '#'
 
+
         if (command == ':GS#'):         
             return '01:23:45.6#'        #SIDEREAL TIME
 
         if (command == ':pS#'):         #side of mount
             return 'East#'
         
-        if (command == ':RT0#'):        #Lunar tracking rate
-            return '#'
-        if (command == ':RT1#'):        #Solar tracking rate
-            return '#'
-        if (command == ':RT2#'):        #sidereal tracking rate
-            return '#'
-        if (command == ':RT9#'):        #Zero tracking rate
-            return '#'
 
-        if (command == ':RG0#'):        #guide rate 0.25
-            return '#'
-        if (command == ':RG1#'):        #guide rate 0.5
-            return '#'
-        if (command == ':RG2#'):        #guide rate 1.0
-            return '#'
-
-        if (command == ':RC0#'):        #center rate 12x
-            return '#'
-        if (command == ':RC1#'):        #center rate 64x
-            return '#'
-        if (command == ':RC2#'):        #center rate 600x
-            return '#'
-        if (command == ':RC3#'):        #center rate 1200x
-            return '#'
 
         if (command == ':Mn#'):         #move north
             self.dec -= 0.1
