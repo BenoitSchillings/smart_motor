@@ -2,6 +2,8 @@ import socket
 import sys
 from parse import *
 
+#------------------------------------------------------------
+
 class Server:
     def ra_to_string(self, ra):
         ra = ra * 3600
@@ -12,6 +14,8 @@ class Server:
         pattern = '%02d:%02d:%02d.%01d'
         return pattern % (h, m, s, 0)
     
+#------------------------------------------------------------
+
     def dec_to_string(self, dec):
         sign = '+'
         if (dec < 0):
@@ -27,6 +31,7 @@ class Server:
         str =  pattern % (deg, m, s)
         return sign + str
        
+#------------------------------------------------------------
 
 #check for numerical value before the # at the end of the command
 #this will define a command which has to be parsed
@@ -42,6 +47,7 @@ class Server:
             return True
         return False
         
+#------------------------------------------------------------
 
     def handle_complex(self, command):
         print("complex ", command)
@@ -83,7 +89,17 @@ class Server:
             if (v == 2):
                 print("center rate 1200x")
             return '#'
+
+        if (command[0:3] == ':Sr'):             #:Sr HH:MM:SS.S# 
+            result = parse(":Sr {}:{}:{}.{}#", command)
+            print(result)
+            return '1'
+        if (command[0:3] == ':Sd'):
+            result = parse(":Sd {}*{}:{}#", command)   #:Sd sDD*MM:SS# 
+            print(result)
+            return '1'
     
+#------------------------------------------------------------
 
     def handle_command(self, command):
         print('received "%s"' % command)
@@ -111,8 +127,6 @@ class Server:
 
         if (command == ':pS#'):         #side of mount
             return 'East#'
-        
-
 
         if (command == ':Mn#'):         #move north
             self.dec -= 0.1
@@ -130,8 +144,14 @@ class Server:
         if (command == ':Q#'):          #stop motion
             return '#'
 
+        if (command == ':MS#'):         #slew to target
+            return '0'
+
         print("*******unknown ", command)
         return ''
+
+#------------------------------------------------------------
+
 
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -171,6 +191,9 @@ class Server:
                 finally:
                     # Clean up the connection
                     self.connection.close()
+
+
+#------------------------------------------------------------
 
 
 
