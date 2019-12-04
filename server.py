@@ -6,13 +6,21 @@ from parse import *
 
 class Server:
     def ra_to_string(self, ra):
-        ra = ra * 3600
+        ra = (ra / 360.0) * (24*3600)       #angle to seconds
 
-        m, s = divmod(ra, 60)
-        h, m = divmod(m, 60)
-        d, h = divmod(h, 24)
+        sec = int(ra % 60)
+        ra = ra - sec
+        ra = ra / 60                        #in minutes
+
+        min = int(ra % 60)
+
+        ra = ra - min
+        ra = ra / 60                        #in hours
+
+        hours = ra
+
         pattern = '%02d:%02d:%02d.%01d'
-        return pattern % (h, m, s, 0)
+        return pattern % (hours, min, sec, 0)
     
 #------------------------------------------------------------
 
@@ -23,9 +31,11 @@ class Server:
             sign = '-'
         dec = dec * 3600
 
-        m, s = divmod(dec, 60)
-        h, m = divmod(m, 60)
-        d, deg = divmod(h, 60)
+        s = dec % 60
+        dec = dec / 60
+        m = dec % 60
+        dec = dec / 60
+        deg = dec
 
         pattern = '%02d*%02d:%02d'
         str =  pattern % (deg, m, s)
@@ -92,7 +102,8 @@ class Server:
 
         if (command[0:3] == ':Sr'):             #:Sr HH:MM:SS.S# 
             result = parse(":Sr {}:{}:{}.{}#", command)
-            self.ra = int(result[0])*15.0 + int(result[1])/60.0 + int(result[2])/3600.0
+            self.target_ra = (int(result[0])*15.0) + (int(result[1])/4.0) + (int(result[2])/240.0)
+      
             print(result)
             return '1'
         if (command[0:3] == ':Sd'):
@@ -102,7 +113,7 @@ class Server:
             if (r0 < 0.0):
                 r0 = - r0
                 sign = -1
-            self.dec = sign*(r0 + int(result[1])/60.0 + int(result[2])/(3600.0))
+            self.target_dec = sign*((r0 + int(result[1])/60.0) + (int(result[2])/(3600.0)))
 
             print(result)
             return '1'
@@ -114,9 +125,11 @@ class Server:
             return('1')
 
         if (command[0:3] == ':RD'): #:RD sxxx.xxxx# Selects the tracking rate in the DEC axis to xxx.xxxx
-            result = parse(":D {}#", command)
+            result = parse(":RD {}#", command)
             print("rate DEC is ", result[0])
             return('1')
+
+
 
     
 #------------------------------------------------------------
@@ -165,10 +178,23 @@ class Server:
             return '#'
 
         if (command == ':MS#'):         #slew to target
+            self.ra = self.target_ra
+            self.dec = self.target_dec
+
             return '0'
 
+        if (command == ':CM#'):
+            self.ra = self.target_ra
+            self.dec = self.target_dec
+            return 'Coordinates     matched.        #'
+
+        if (command == ':CMR#'):
+            self.ra = self.target_ra
+            self.dec = self.target_dec
+            return 'Coordinates     matched.        #'
+
         print("*******unknown ", command)
-        return ''
+        return '#'
 
 #------------------------------------------------------------
 
@@ -181,7 +207,11 @@ class Server:
         self.sock.bind(self.server_address)
         self.ra = 0.0
         self.dec = 0.0
-        #print(self.dec_to_string(21))
+        self.target_ra = 0.0
+        self.target_dec = 0.0
+
+        #print(self.ra_to_string(30.2))
+        #print(self.dec_to_string(70.5))
 
     def run(self):
         self.sock.listen(1)
@@ -195,10 +225,12 @@ class Server:
                 valid = False
 
             if (valid):
+                self.connection.settimeout(3.0)
                 try:
                     #print ('connection from', client_address)
                     while True:
                         data = self.connection.recv(1024)
+                        print("wait")
                         if (data):
                             result = self.handle_command(data.decode('utf-8'))
                             print(result)
@@ -208,6 +240,8 @@ class Server:
                             else:
                                 print('no more data from', self.client_address)
                                 break
+                except:
+                    print("timeout")  
                 finally:
                     # Clean up the connection
                     self.connection.close()
