@@ -8,6 +8,7 @@ import time
 import serial
 import datetime
 import ephem
+import threading
 
 #----------------------------------------------------------
 
@@ -55,6 +56,14 @@ class Smartmotor:
 
     def Go(self):
         self.writeser('G ')
+
+    def Velocity(self):
+        self.writeser('MV ')
+        self.Go()
+
+    def Position(self):
+        self.writeser('MP ')
+        self.Go()
 
     def Speed(self, speed):
         self.target_speed = speed
@@ -145,6 +154,21 @@ class Smartmotor:
 
 #----------------------------------------------------------
 
+
+def raw_motor():
+    motor = Smartmotor('COM8')
+    motor.Speed(motor.calc_rps())
+    motor.Acceleration(20000)
+    motor.Target(1*200000)
+    motor.Go()
+    print(motor.getPosition())
+    time.sleep(1)
+    for k in range(5011):
+        p0 = motor.getPosition()
+        time.sleep(1)
+        p1 = motor.getPosition()
+        print(p1-p0, p1)
+    motor.closeSerialPort()
 
 
 class Mount:
@@ -241,7 +265,6 @@ class Mount:
         return speed_RA
 
     def get_DEC_speed(self):
-        return 0
         speed_DEC = self.motor_DEC.getSpeed()
         return speed_DEC
 
@@ -251,14 +274,14 @@ class Mount:
                  
     
 
-    def track(self):
-        self.RA_rate(15.041)
-        self.DEC_rate(0)
-        self.motor_RA.Target(10000000)
-        time.sleep(0.1)
+    def track(self, rate_ra, rate_dec):
+        self.RA_rate(rate_ra)
+        self.DEC_rate(rate_dec)
 
-        ra0 = self.get_RA()
-      
+        self.motor_RA.writeser('MV ')
+        self.motor_DEC.writeser('MV ')
+        self.motor_DEC.Go()
+        self.motor_RA.Go()
 
         seq = 0
 
@@ -266,48 +289,111 @@ class Mount:
             time.sleep(1)
             seq = seq + 1
             self.motor_RA.SpeedAdjust()
-            print("v", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed())
+            self.motor_DEC.SpeedAdjust()
+            print("v", self.get_RA(), self.get_DEC(), self.get_RA_speed(), self.get_DEC_speed())
         
       
 #----------------------------------------------------------
 
-def raw_motor():
-    motor = Smartmotor('COM8')
-    motor.Speed(motor.calc_rps())
-    motor.Acceleration(20000)
-    motor.Target(1*200000)
-    motor.Go()
-    print(motor.getPosition())
-    time.sleep(1)
-    for k in range(5011):
-        p0 = motor.getPosition()
-        time.sleep(1)
-        p1 = motor.getPosition()
-        print(p1-p0, p1)
-    motor.closeSerialPort()
+mount = 0
+NOPOS = -9999
+
+def handle_goto(mount):
+    mount.motor_RA.Position()
+    mount.motor_DEC.Position()
+
+    mount.RA_rate(3600)
+    mount.DEC_rate(1.0*3600)
+    mount.target_pos(mount.goto_ra, mount.goto_dec)
+    mount.goto_ra = NOPOS
+    mount.goto_dec = NOPOS
+
+    while((mount.get_RA_speed() != 0 or
+          mount.get_DEC_speed() != 0) and
+          mount.interrupt == False):
+        print("goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+        time.sleep(0.1)
+
+    mount.tracking_rate_ra = 0
+    mount.tracking_rate_dec = 0
+        
+
+
+def motor_thread(name):
+    global mount
+
+    mount = Mount()
+    
+    mount.interrupt = False
+
+    mount.req_tracking_rate_ra = 15.041
+    mount.req_tracking_rate_dec = 0.0
+
+    mount.tracking_rate_ra = 0.0
+    mount.tracking_rate_dec = 0.0
+
+    mount.goto_ra = NOPOS
+    mount.goto_dec = NOPOS
+
+    phase = 0
+
+    while(True):
+        time.sleep(0.03)
+        phase = phase + 1
+        if (mount.req_tracking_rate_ra != mount.tracking_rate_ra or
+            mount.req_tracking_rate_dec != mount.tracking_rate_dec):
+    
+            mount.tracking_rate_ra = mount.req_tracking_rate_ra
+            mount.tracking_rate_dec = mount.req_tracking_rate_dec
+
+            mount.RA_rate(mount.tracking_rate_ra)
+            mount.DEC_rate( mount.tracking_rate_dec)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
+            print("set rate")
+
+
+        if (mount.goto_ra != NOPOS and mount.goto_dec != NOPOS):
+            handle_goto(mount)
+
+        if (phase % 30 == 0):
+            mount.motor_RA.SpeedAdjust()
+            mount.motor_DEC.SpeedAdjust()
+            print("v", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+
+
 
 if __name__ == '__main__':
     #raw_motor()
-    mount = Mount()
+
+    x = threading.Thread(target=motor_thread, args=(1,), daemon=True)
+    x.start()
+
+    time.sleep(5)
+    print("goto")
+    mount.goto_ra = 10
+    mount.goto_dec = 10
+    time.sleep(5)
+    while(True):
+        time.sleep(1)
+
+
     #mount.set_RA(20)
 
     
-    mount.RA_rate(3600)
-    mount.DEC_rate(1.0*3600)
-    mount.target_pos(14.0, 10.5)
+    #mount.RA_rate(3600)
+    #mount.DEC_rate(1.0*3600)
+    #mount.target_pos(14.0, 10.5)
 
 
-    while(mount.get_RA_speed()!=0 or mount.get_DEC_speed()!=0):
-        print(mount.get_RA(), mount.get_DEC(), mount.get_RA_speed())
-        time.sleep(0.1)
+    #while(mount.get_RA_speed()!=0 or mount.get_DEC_speed()!=0):
+    #    print(mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+    #    time.sleep(0.1)
 
 
-    mount.track()
-
-    for k in range(100):
-        mount.display()
-        time.sleep(0.5)
-        print(mount.time())
+    #while(mount.get_RA_speed()!=0 or mount.get_DEC_speed()!=0):
+    #    print(mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+    #    time.sleep(0.1)
 
 
 
