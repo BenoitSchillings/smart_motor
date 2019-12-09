@@ -289,6 +289,7 @@ NOPOS = -9999
 def handle_goto(mount):
     mount.motor_RA.Position()
     mount.motor_DEC.Position()
+    mount.interrupt = False
 
     mount.RA_rate(3600)
     mount.DEC_rate(1.0*3600)
@@ -302,9 +303,18 @@ def handle_goto(mount):
         print("goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
         time.sleep(0.1)
 
+
+    if (mount.interrupt == True):
+        print("interupt")
     mount.tracking_rate_ra = 0
     mount.tracking_rate_dec = 0
         
+def handle_sync(mount):
+    mount.set_RA(mount.sync_ra)
+    mount.set_DEC(mount.sync_dec)
+    mount.sync_ra = NOPOS
+    mount.sync_dec = NOPOS
+    mount.sync = False
 
 
 def motor_thread(name):
@@ -322,7 +332,7 @@ def motor_thread(name):
 
     mount.goto_ra = NOPOS
     mount.goto_dec = NOPOS
-
+    mount.goto = False
     phase = 0
 
     while(True):
@@ -341,8 +351,11 @@ def motor_thread(name):
             print("set rate")
 
 
-        if (mount.goto_ra != NOPOS and mount.goto_dec != NOPOS):
+        if (mount.goto == True):
             handle_goto(mount)
+            
+        if (mount.sync == True):
+            handle_sync(mount)
         
         ra = mount.get_RA()
         dec = mount.get_DEC()
@@ -351,10 +364,6 @@ def motor_thread(name):
             mount.motor_RA.SpeedAdjust()
             mount.motor_DEC.SpeedAdjust()
             print("v", ra, dec, mount.get_RA_speed(), mount.get_DEC_speed())
-
-
-
-
 
 
 
@@ -530,6 +539,7 @@ class Server:
             return '#'
 
         if (command == ':Q#'):          #stop motion
+            mount.interrupt = True
             return '#'
 
         if (command == ':MS#'):         #slew to target
@@ -541,12 +551,18 @@ class Server:
         if (command == ':CM#'):
             self.ra = self.target_ra
             self.dec = self.target_dec
+            mount.goto_ra = self.ra
+            mount.goto_dec = self.dec
+            mount.goto = True
             return 'Coordinates     matched.        #'
 
         if (command == ':CMR#'):
             self.ra = self.target_ra
             self.dec = self.target_dec
-            return 'Coordinates     matched.        #'
+            mount.sync_ra = self.ra
+            mount.sync_dec = self.dec
+            mount.sync = True
+           return 'Coordinates     matched.        #'
 
         print("*******unknown ", command)
         return '#'
