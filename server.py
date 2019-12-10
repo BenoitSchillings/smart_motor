@@ -159,8 +159,8 @@ class Mount:
     def __init__(self):
         self.motor_DEC = Smartmotor('COM8')
         self.motor_RA = Smartmotor('COM9')
-        self.motor_DEC.Acceleration(200)
-        self.motor_RA.Acceleration(200)
+        self.motor_DEC.Acceleration(120)
+        self.motor_RA.Acceleration(120)
         self.ephem = ephem.city('San Francisco')
         self.sky_angle = self.siderial_angle()
 
@@ -290,17 +290,19 @@ def handle_goto(mount):
     mount.motor_RA.Position()
     mount.motor_DEC.Position()
     mount.interrupt = False
-
-    mount.RA_rate(3600)
-    mount.DEC_rate(1.0*3600)
+    
+    mount.RA_rate(4*3600)
+    mount.DEC_rate(4*3600)
+    print("start goto ", mount.goto_ra, mount.goto_dec)
     mount.target_pos(mount.goto_ra, mount.goto_dec)
     mount.goto_ra = NOPOS
     mount.goto_dec = NOPOS
+    mount.goto = False
 
     while((mount.get_RA_speed() != 0 or
           mount.get_DEC_speed() != 0) and
           mount.interrupt == False):
-        print("goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+        print("going goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
         time.sleep(0.1)
 
 
@@ -308,6 +310,8 @@ def handle_goto(mount):
         print("interupt")
     mount.tracking_rate_ra = 0
     mount.tracking_rate_dec = 0
+
+#----------------------------------------------------------
         
 def handle_sync(mount):
     mount.set_RA(mount.sync_ra)
@@ -316,6 +320,7 @@ def handle_sync(mount):
     mount.sync_dec = NOPOS
     mount.sync = False
 
+#----------------------------------------------------------
 
 def motor_thread(name):
     global mount
@@ -325,7 +330,7 @@ def motor_thread(name):
     mount.interrupt = False
 
     mount.req_tracking_rate_ra = 15.041
-    mount.req_tracking_rate_dec = 20.0
+    mount.req_tracking_rate_dec = 0
 
     mount.tracking_rate_ra = 0.0
     mount.tracking_rate_dec = 0.0
@@ -333,10 +338,11 @@ def motor_thread(name):
     mount.goto_ra = NOPOS
     mount.goto_dec = NOPOS
     mount.goto = False
+    mount.sync = False
     phase = 0
 
     while(True):
-        time.sleep(0.03)
+        time.sleep(0.02)
         phase = phase + 1
         if (mount.req_tracking_rate_ra != mount.tracking_rate_ra or
             mount.req_tracking_rate_dec != mount.tracking_rate_dec):
@@ -348,14 +354,21 @@ def motor_thread(name):
             mount.DEC_rate( mount.tracking_rate_dec)
             mount.motor_RA.Velocity()
             mount.motor_DEC.Velocity()
-            print("set rate")
+            
 
 
         if (mount.goto == True):
+            print("GOTO")
             handle_goto(mount)
+            mount.RA_rate(mount.tracking_rate_ra)
+            mount.DEC_rate( mount.tracking_rate_dec)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
             
         if (mount.sync == True):
             handle_sync(mount)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
         
         ra = mount.get_RA()
         dec = mount.get_DEC()
@@ -373,6 +386,7 @@ class Server:
     def ra_to_string(self, ra):
         ra = (ra / 360.0) * (24*3600)       #angle to seconds
 
+        secfract = 10 * (ra % 1)
         sec = int(ra % 60)
         ra = ra - sec
         ra = ra / 60                        #in minutes
@@ -385,7 +399,7 @@ class Server:
         hours = ra
 
         pattern = '%02d:%02d:%02d.%01d'
-        return pattern % (hours, min, sec, 0)
+        return pattern % (hours, min, sec, secfract)
     
 #------------------------------------------------------------
 
@@ -401,6 +415,7 @@ class Server:
         m = dec % 60
         dec = dec / 60
         deg = dec
+        deg = deg % 90
 
         pattern = '%02d*%02d:%02d'
         str =  pattern % (deg, m, s)
@@ -437,17 +452,20 @@ class Server:
             if (v == 9):
                 print("zero speed")
 
-            return '#'
+            return ''
 
         if (command[0:3] == ':RG'):
             result = parse(":RG{}#", command)
             v = int(result[0])
             if (v == 0):
                 print("guide 0.25")
+                self.center_rate = 15*0.25
             if (v == 1):
                 print("guide 0.5")
+                self.center_rate = 15*0.5
             if (v == 2):
                 print("guide 1.0")
+                self.center_rate = 15*1.0
 
             return '#'
 
@@ -456,19 +474,23 @@ class Server:
             v = int(result[0])
             if (v == 0):
                 print("center rate 12x")
+                self.center_rate = 12*15
             if (v == 1):
                 print("center rate 64x")
+                self.center_rate = 64*15
             if (v == 2):
                 print("center rate 600x")
-            if (v == 2):
+                self.center_rate = 600*15
+            if (v == 3):
                 print("center rate 1200x")
+                self.center_rate = 900*15
             return '#'
 
         if (command[0:3] == ':Sr'):             #:Sr HH:MM:SS.S# 
             result = parse(":Sr {}:{}:{}.{}#", command)
             self.target_ra = (int(result[0])*15.0) + (int(result[1])/4.0) + (int(result[2])/240.0)
       
-            print(result)
+            #print(result)
             return '1'
         if (command[0:3] == ':Sd'):
             result = parse(":Sd {}*{}:{}#", command)   #:Sd sDD*MM:SS# 
@@ -479,7 +501,7 @@ class Server:
                 sign = -1
             self.target_dec = sign*((r0 + int(result[1])/60.0) + (int(result[2])/(3600.0)))
 
-            print(result)
+            #print(result)
             return '1'
 
 
@@ -499,7 +521,7 @@ class Server:
 #------------------------------------------------------------
 
     def handle_command(self, command):
-        print('received "%s"' % command)
+        #print('received "%s"' % command)
         if (self.is_complex(command)):
             return self.handle_complex(command)
 
@@ -524,45 +546,44 @@ class Server:
 
         if (command == ':pS#'):         #side of mount
             return 'East#'
-
         if (command == ':Mn#'):         #move north
-            self.dec -= 0.1
+            mount.req_tracking_rate_dec = (self.center_rate)
             return '#'
         if (command == ':Ms#'):         #move south
-            self.dec += 0.1
+            mount.req_tracking_rate_dec = (-self.center_rate)
             return '#'
         if (command == ':Me#'):         #move east
-            self.ra += 0.1
+            mount.req_tracking_rate_ra = 15.041 + -self.center_rate
             return '#'
         if (command == ':Mw#'):         #move west
-            self.ra -= 0.1
+            mount.req_tracking_rate_ra = 15.041 + self.center_rate
             return '#'
 
         if (command == ':Q#'):          #stop motion
+            mount.req_tracking_rate_ra = 15.041
+            mount.req_tracking_rate_dec = 0
+
             mount.interrupt = True
             return '#'
 
         if (command == ':MS#'):         #slew to target
-            self.ra = self.target_ra
-            self.dec = self.target_dec
+            mount.goto_ra = self.target_ra
+            mount.goto_dec = self.target_dec
+            mount.goto = True
 
             return '0'
 
         if (command == ':CM#'):
-            self.ra = self.target_ra
-            self.dec = self.target_dec
-            mount.goto_ra = self.ra
-            mount.goto_dec = self.dec
-            mount.goto = True
+            mount.sync_ra = self.target_ra
+            mount.sync_dec = self.target_dec
+            mount.sync = True
             return 'Coordinates     matched.        #'
 
         if (command == ':CMR#'):
-            self.ra = self.target_ra
-            self.dec = self.target_dec
-            mount.sync_ra = self.ra
-            mount.sync_dec = self.dec
+            mount.sync_ra = self.target_ra
+            mount.sync_dec = self.target_dec
             mount.sync = True
-           return 'Coordinates     matched.        #'
+            return 'Coordinates     matched.        #'
 
         print("*******unknown ", command)
         return '#'
@@ -580,9 +601,10 @@ class Server:
         self.dec = 0.0
         self.target_ra = 0.0
         self.target_dec = 0.0
+        
+        self.center_rate = 64*15
 
-        #print(self.ra_to_string(30.2))
-        #print(self.dec_to_string(70.5))
+
 
     def run(self):
         self.sock.listen(1)
@@ -603,7 +625,7 @@ class Server:
                         data = self.connection.recv(1024)
                         if (data):
                             result = self.handle_command(data.decode('utf-8'))
-                            print(result)
+                            print(data, result)
                             if (result != ''):
                                 self.connection.sendall(str.encode(result))
                             else:
