@@ -134,7 +134,7 @@ class Smartmotor:
         position = int(string)
         return(position)
 
-    def motor_steps(self):          #number of step for one full rotation
+    def motor_steps(self):                      #number of step for one full rotation
         return 20000.0
     
     def position_to_rotation(self, value):
@@ -177,29 +177,29 @@ class Mount:
         return 57.29580026*self.ephem.sidereal_time()
 
 
-    def RA_Rotation(self):          #angle per worm gear rotation
+    def RA_Rotation(self):                              #angle per worm gear rotation
         return(360.0/225.0)
 
-    def DEC_Rotation(self):         #angle per worm gear rotation
+    def DEC_Rotation(self):                             #angle per worm gear rotation
         return(360.0/225.0)
 
-    def RA_rate(self, rate=15.0):    #motion rate (in arcsec per second)
+    def RA_rate(self, rate=15.0):                       #motion rate (in arcsec per second)
         unity_rate_0 = self.motor_RA.calc_rps()
-        unity_rate = self.RA_Rotation() * 3600.0 #this would be one RPS arcsec rate
+        unity_rate = self.RA_Rotation() * 3600.0        #this would be one RPS arcsec rate
         divider = rate / unity_rate
         self.motor_RA.Speed(unity_rate_0 * divider)
         self.motor_RA.Go()
 
-    def DEC_rate(self, rate=0.0):    #motion rate (in arcsec per second)
+    def DEC_rate(self, rate=0.0):                       #motion rate (in arcsec per second)
         unity_rate_0 = self.motor_DEC.calc_rps()
-        unity_rate = self.DEC_Rotation() * 3600.0 #this would be one RPS arcsec rate
+        unity_rate = self.DEC_Rotation() * 3600.0       #this would be one RPS arcsec rate
         divider = rate / unity_rate
         self.motor_DEC.Speed(unity_rate_0 * divider)
         self.motor_DEC.Go()
 
 
-    def ra_to_pos(self, ra):                #map RA value (0..360) to target encoder value
-        delta_RA = self.siderial_angle()              #second for the reference RA
+    def ra_to_pos(self, ra):                            #map RA value (0..360) to target encoder value
+        delta_RA = self.siderial_angle()                #second for the reference RA
         ra = ra + delta_RA
         ra = ra % 360
 
@@ -208,13 +208,13 @@ class Mount:
         
         return ra      
 
-    def dec_to_pos(self, dec):              #map DEC value (-90..90) to target encoder value
+    def dec_to_pos(self, dec):                          #map DEC value (-90..90) to target encoder value
         dec = dec / self.DEC_Rotation()
         dec = self.motor_DEC.rotation_to_position(dec)
         return dec
 
 
-    def pos_to_RA(self, pos):               # map encoder to RA
+    def pos_to_RA(self, pos):                           # map encoder to RA
         pos = self.motor_RA.position_to_rotation(pos)
         pos = pos * self.RA_Rotation()
         delta_RA = self.siderial_angle()
@@ -223,7 +223,7 @@ class Mount:
 
         return ra       
 
-    def pos_to_DEC(self, pos):          #map encoder to DEC
+    def pos_to_DEC(self, pos):                          #map encoder to DEC
         pos = self.motor_DEC.position_to_rotation(pos)
         pos = pos * self.DEC_Rotation()
         
@@ -243,6 +243,10 @@ class Mount:
     def get_RA(self):
         p_RA = self.motor_RA.getPosition()
         ra = self.pos_to_RA(p_RA)
+        if (ra > 360.0 or ra < 0.0):
+            ra = ra % 360
+            self.set_RA(ra)
+
         self.last_ra = ra
         return ra
 
@@ -405,7 +409,7 @@ class Server:
 
     def dec_to_string(self, dec):
         sign = '+'
-        if (dec < 0):
+        if (dec < 0.0):
             dec = -dec
             sign = '-'
         dec = dec * 3600
@@ -496,7 +500,7 @@ class Server:
             result = parse(":Sd {}*{}:{}#", command)   #:Sd sDD*MM:SS# 
             r0 = int(result[0])
             sign = 1
-            if (r0 < 0.0):
+            if (result[0][0] == '-'):
                 r0 = - r0
                 sign = -1
             self.target_dec = sign*((r0 + int(result[1])/60.0) + (int(result[2])/(3600.0)))
