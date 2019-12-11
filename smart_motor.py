@@ -9,8 +9,6 @@ import datetime
 import ephem
 import threading
 
-
-
 class Smartmotor:
     def __init__(self, a_port):
         self.atEnd = False

@@ -8,8 +8,8 @@ import serial
 import datetime
 import ephem
 import threading
-import smart_motor
-import mount
+
+from mount import Mount
 
 #----------------------------------------------------------
 
@@ -272,6 +272,104 @@ class Server:
 
 
 #------------------------------------------------------------
+
+mount = 0
+NOPOS = -9999
+
+def handle_goto(mount):
+    mount.motor_RA.Position()
+    mount.motor_DEC.Position()
+    mount.interrupt = False
+    
+    mount.RA_rate(4*3600)
+    mount.DEC_rate(4*3600)
+    print("start goto ", mount.goto_ra, mount.goto_dec)
+    mount.target_pos(mount.goto_ra, mount.goto_dec)
+    mount.goto_ra = NOPOS
+    mount.goto_dec = NOPOS
+    mount.goto = False
+
+    while((mount.get_RA_speed() != 0 or
+          mount.get_DEC_speed() != 0) and
+          mount.interrupt == False):
+        print("going goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+        time.sleep(0.1)
+
+
+    if (mount.interrupt == True):
+        print("interupt")
+    mount.tracking_rate_ra = 0
+    mount.tracking_rate_dec = 0
+
+#----------------------------------------------------------
+        
+def handle_sync(mount):
+    mount.set_RA(mount.sync_ra)
+    mount.set_DEC(mount.sync_dec)
+    mount.sync_ra = NOPOS
+    mount.sync_dec = NOPOS
+    mount.sync = False
+
+#----------------------------------------------------------
+
+def motor_thread(name):
+    global mount
+
+    mount = Mount()
+    print("max = ", mount.ra_to_pos(359.999))
+    mount.interrupt = False
+
+    mount.req_tracking_rate_ra = 15.041
+    mount.req_tracking_rate_dec = 0
+
+    mount.tracking_rate_ra = 0.0
+    mount.tracking_rate_dec = 0.0
+
+    mount.goto_ra = NOPOS
+    mount.goto_dec = NOPOS
+    mount.goto = False
+    mount.sync = False
+    phase = 0
+
+    while(True):
+        time.sleep(0.02)
+        phase = phase + 1
+        if (mount.req_tracking_rate_ra != mount.tracking_rate_ra or
+            mount.req_tracking_rate_dec != mount.tracking_rate_dec):
+    
+            mount.tracking_rate_ra = mount.req_tracking_rate_ra
+            mount.tracking_rate_dec = mount.req_tracking_rate_dec
+
+            mount.RA_rate(mount.tracking_rate_ra)
+            mount.DEC_rate( mount.tracking_rate_dec)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
+            
+
+
+        if (mount.goto == True):
+            print("GOTO")
+            handle_goto(mount)
+            mount.RA_rate(mount.tracking_rate_ra)
+            mount.DEC_rate( mount.tracking_rate_dec)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
+            
+        if (mount.sync == True):
+            handle_sync(mount)
+            mount.motor_RA.Velocity()
+            mount.motor_DEC.Velocity()
+        
+        ra = mount.get_RA()
+        dec = mount.get_DEC()
+
+        if (phase % 30 == 0):
+            mount.motor_RA.SpeedAdjust()
+            mount.motor_DEC.SpeedAdjust()
+            print("v", ra, dec, mount.get_RA_speed(), mount.get_DEC_speed())
+
+#----------------------------------------------------------
+
 
 x = threading.Thread(target=motor_thread, args=(1,), daemon=True)
 x.start()
