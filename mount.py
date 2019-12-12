@@ -9,14 +9,17 @@ import datetime
 import ephem
 import threading
 from smart_motor import Smartmotor
+from ui import UI
+
 #----------------------------------------------------------
 MAX_RA = 3352455
 
 
 class Mount:
-    def __init__(self):
-        self.motor_DEC = Smartmotor('COM8')
-        self.motor_RA = Smartmotor('COM9')
+    def __init__(self, gui):
+        self.gui = gui
+        self.motor_DEC = Smartmotor('COM8', gui)
+        self.motor_RA = Smartmotor('COM9', gui)
         self.motor_DEC.Acceleration(120)
         self.motor_RA.Acceleration(120)
         self.ephem = ephem.city('San Francisco')
@@ -97,10 +100,12 @@ class Mount:
 
         self.motor_DEC.Go()
         self.motor_RA.Go()
-        time.sleep(0.1)
+        time.sleep(0.01)
 
     def get_RA(self):
         p_RA = self.motor_RA.getPosition()
+        self.gui.set("Encoder_RA", p_RA)
+
         #p_RA = p_RA % MAX_RA
         ra = self.pos_to_RA(p_RA)
         if (ra > 360.0 or ra < 0.0):
@@ -120,6 +125,7 @@ class Mount:
 
     def get_DEC(self):
         p_DEC = self.motor_DEC.getPosition()
+        self.gui.set("Encoder_DEC", p_DEC)
         dec = self.pos_to_DEC(p_DEC)
         self.last_dec = dec
         return dec

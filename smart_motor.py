@@ -8,9 +8,10 @@ import serial
 import datetime
 import ephem
 import threading
+from ui import UI
 
 class Smartmotor:
-    def __init__(self, a_port):
+    def __init__(self, a_port, gui):
         self.atEnd = False
         self.setupSerialConnection(a_port)
         self.base_time = time.clock()

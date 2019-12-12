@@ -8,18 +8,17 @@ import serial
 import datetime
 import ephem
 import threading
+from ui import UI
 
 from mount import Mount
 
 #----------------------------------------------------------
 
-#------------------------------------------------------------
-
 class Server:
     def ra_to_string(self, ra):
         ra = (ra / 360.0) * (24*3600)       #angle to seconds
 
-        secfract = 10 * (ra % 1)
+        secfract = 10 * ((ra) % 1)
         sec = int(ra % 60)
         ra = ra - sec
         ra = ra / 60                        #in minutes
@@ -32,7 +31,7 @@ class Server:
         hours = ra
 
         pattern = '%02d:%02d:%02d.%01d'
-        return pattern % (hours, min, sec, secfract)
+        return pattern % (hours, min, sec, (secfract+0.5))
     
 #------------------------------------------------------------
 
@@ -121,6 +120,7 @@ class Server:
 
         if (command[0:3] == ':Sr'):             #:Sr HH:MM:SS.S# 
             result = parse(":Sr {}:{}:{}.{}#", command)
+            print(result)
             self.target_ra = (int(result[0])*15.0) + (int(result[1])/4.0) + (int(result[2])/240.0)
       
             #print(result)
@@ -168,10 +168,14 @@ class Server:
             return '#'
 
         if (command == ':GR#'):         #RA
-            return self.ra_to_string(mount.last_ra) + "#"
+            str = self.ra_to_string(mount.last_ra)
+            self.gui.set('RA', str)
+            return str + "#"
 
         if (command == ':GD#'):         #DEC
-            return self.dec_to_string(mount.last_dec) + '#'
+            str = self.dec_to_string(mount.last_dec)
+            self.gui.set('DEC', str)
+            return str + '#'
 
 
         if (command == ':GS#'):         
@@ -224,7 +228,8 @@ class Server:
 #------------------------------------------------------------
 
 
-    def __init__(self):
+    def __init__(self, gui):
+        self.gui = gui
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.server_address = ('localhost', 1001)
@@ -258,14 +263,14 @@ class Server:
                         data = self.connection.recv(1024)
                         if (data):
                             result = self.handle_command(data.decode('utf-8'))
-                            print(data, result)
+                            #self.gui.set("Last",(data.decode('utf-8') + result))
                             if (result != ''):
                                 self.connection.sendall(str.encode(result))
                             else:
                                 print('no more data from', self.client_address)
                                 break
                 except:
-                    print("timeout")  
+                    print("timeout", sys.exc_info())  
                 finally:
                     # Clean up the connection
                     self.connection.close()
@@ -279,26 +284,36 @@ NOPOS = -9999
 def handle_goto(mount):
     mount.motor_RA.Position()
     mount.motor_DEC.Position()
+    print("t0", time.clock())
+
     mount.interrupt = False
     
-    mount.RA_rate(4*3600)
-    mount.DEC_rate(4*3600)
+    mount.RA_rate(3*3600)
+    mount.DEC_rate(3*3600)
     print("start goto ", mount.goto_ra, mount.goto_dec)
     mount.target_pos(mount.goto_ra, mount.goto_dec)
-    mount.goto_ra = NOPOS
-    mount.goto_dec = NOPOS
     mount.goto = False
 
     while((mount.get_RA_speed() != 0 or
           mount.get_DEC_speed() != 0) and
           mount.interrupt == False):
-        print("going goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
-        time.sleep(0.1)
+        gui.set("Rate_RA", mount.get_RA_speed())
+        gui.set("Rate_DEC", mount.get_DEC_speed())
+        #print("going goto", mount.get_RA(), mount.get_DEC(), mount.get_RA_speed(), mount.get_DEC_speed())
+        time.sleep(0.05)
 
 
     if (mount.interrupt == True):
         print("interupt")
-    mount.tracking_rate_ra = 0
+    else:
+        mount.target_pos(mount.goto_ra, mount.goto_dec)
+
+    mount.goto_ra = NOPOS
+    mount.goto_dec = NOPOS
+
+
+    print("t1", time.clock())
+    mount.RA_rate(mount.tracking_rate_ra)
     mount.tracking_rate_dec = 0
 
 #----------------------------------------------------------
@@ -312,10 +327,12 @@ def handle_sync(mount):
 
 #----------------------------------------------------------
 
-def motor_thread(name):
+def motor_thread(gui):
     global mount
 
-    mount = Mount()
+
+    #print("gui is ", gui)
+    mount = Mount(gui)
     print("max = ", mount.ra_to_pos(359.999))
     mount.interrupt = False
 
@@ -351,7 +368,7 @@ def motor_thread(name):
             print("GOTO")
             handle_goto(mount)
             mount.RA_rate(mount.tracking_rate_ra)
-            mount.DEC_rate( mount.tracking_rate_dec)
+            mount.DEC_rate(mount.tracking_rate_dec)
             mount.motor_RA.Velocity()
             mount.motor_DEC.Velocity()
             
@@ -366,13 +383,20 @@ def motor_thread(name):
         if (phase % 30 == 0):
             mount.motor_RA.SpeedAdjust()
             mount.motor_DEC.SpeedAdjust()
-            print("v", ra, dec, mount.get_RA_speed(), mount.get_DEC_speed())
+
+        if (phase % 15 == 0):
+            gui.set("Rate_RA", mount.get_RA_speed())
+            gui.set("Rate_DEC", mount.get_DEC_speed())
+
 
 #----------------------------------------------------------
 
 
-x = threading.Thread(target=motor_thread, args=(1,), daemon=True)
+gui = UI()
+
+x = threading.Thread(target=motor_thread, args=(gui,), daemon=True)
 x.start()
 
-server = Server()
+server = Server(gui)
+
 server.run()
